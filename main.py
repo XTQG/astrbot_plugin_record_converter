@@ -7,7 +7,7 @@ from pydantic.dataclasses import dataclass
 from astrbot.api import logger
 from astrbot.api.event import MessageChain, filter
 from astrbot.api.star import Context, Star
-from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.components import File, Plain, Record
@@ -23,8 +23,11 @@ from .utils import download_file, get_file_name, get_reply_chain, upload_file
 class RecordConverterTool(FunctionTool[AstrAgentContext]):
     name: str = "text_to_record"
     description: str = "Convert text into a QQ voice message."
+    # 使用插件配置中的默认 AI 语音角色。
     character_id: str = "lucy-voice-f36"
+    # 配置中转群后优先用中转群生成语音；为空时使用当前群聊。
     ship_gid: str = ""
+    # 提供给 LLM 的工具入参，只允许传入需要转换的文本。
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
@@ -38,9 +41,7 @@ class RecordConverterTool(FunctionTool[AstrAgentContext]):
         }
     )
 
-    async def run(
-        self, event: AiocqhttpMessageEvent, **kwargs
-    ) -> ToolExecResult | None:
+    async def run(self, event: AiocqhttpMessageEvent, **kwargs) -> str | None:
         text = str(kwargs.get("text") or "").strip()
         if not text:
             return "error: text is required."
@@ -66,6 +67,7 @@ class RecordConverterTool(FunctionTool[AstrAgentContext]):
             return "error: failed to generate voice URL."
 
         await event.send(MessageChain(chain=[Record.fromURL(audio_url)]))
+        # 返回 None 表示工具已经直接发送结果，避免 LLM 再追加文字回复。
         return None
 
 
